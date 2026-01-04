@@ -14,4 +14,4 @@ rebuild:
 
 # Run the assistant
 run:
-	ros2 run assistant speech_node
+	ros2 launch assistant assistant.launch.py

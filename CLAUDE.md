@@ -17,3 +17,8 @@ source install/setup.bash
 
 - Main package: `src/assistant/`
 - Models cache: `models/` (gitignored)
+
+## Nodes
+
+- `speech_node` - Captures audio, runs VAD, transcribes with Whisper, publishes to `/speech`
+- `trigger_node` - Subscribes to `/speech`, detects "Hey Ross", publishes to `/user_requests`

@@ -62,8 +62,17 @@ source install/setup.bash
 ### Running
 
 ```bash
-# Run speech recognition
+# Run all nodes via launch file
+make run
+
+# Or directly:
+ros2 launch assistant assistant.launch.py
+```
+
+To run nodes individually:
+```bash
 ros2 run assistant speech_node
+ros2 run assistant trigger_node
 ```
 
 The first run downloads the Whisper "small" model (~460 MB) to `models/`.
@@ -81,6 +90,24 @@ Example with custom parameters:
 ```bash
 ros2 run assistant speech_node --ros-args -p model:=base -p vad_threshold:=0.7
 ```
+
+#### Trigger Node Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `input_topic` | `speech` | Topic to subscribe to for speech input |
+| `output_topic` | `user_requests` | Topic to publish triggered requests |
+| `trigger_phrases` | `["hey ross"]` | List of trigger phrases to detect |
+
+The trigger node listens for "Hey Ross" (and variations) and publishes the request text (with the trigger phrase stripped) to `/user_requests`.
+
+Example:
+```bash
+# Listen for triggered requests
+ros2 topic echo /user_requests
+```
+
+Say "Hey Ross, turn on the lights" and `/user_requests` will receive: "turn on the lights"
 
 ## License
 
