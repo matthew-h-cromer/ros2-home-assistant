@@ -5,6 +5,10 @@ import os
 # Default Whisper model
 DEFAULT_WHISPER_MODEL = "small"
 
+# Default Piper TTS settings
+DEFAULT_PIPER_VOICE = "en_US-lessac-medium"
+PIPER_SAMPLE_RATE = 22050
+
 # Models directory (repo-root/models/)
 _PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(_PACKAGE_DIR)))

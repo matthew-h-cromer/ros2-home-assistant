@@ -28,6 +28,7 @@ setup(
             'speech_node = assistant.speech_node:main',
             'trigger_node = assistant.trigger_node:main',
             'llm_node = assistant.llm_node:main',
+            'tts_node = assistant.tts_node:main',
         ],
     },
 )

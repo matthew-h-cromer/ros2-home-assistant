@@ -9,5 +9,5 @@ numpy
 # LLM
 anthropic
 
-# TTS (placeholder - will add Piper later)
-# piper-tts
+# TTS
+piper-tts

@@ -34,12 +34,26 @@ def generate_launch_description():
         description='Timezone for time-related queries'
     )
 
+    tts_voice_arg = DeclareLaunchArgument(
+        'tts_voice',
+        default_value='en_US-lessac-medium',
+        description='Piper TTS voice model name'
+    )
+
+    tts_rate_arg = DeclareLaunchArgument(
+        'tts_rate',
+        default_value='1.0',
+        description='TTS speech rate (0.5-2.0, lower is faster)'
+    )
+
     return LaunchDescription([
         # Launch arguments
         conversation_timeout_arg,
         max_history_turns_arg,
         location_arg,
         timezone_arg,
+        tts_voice_arg,
+        tts_rate_arg,
 
         # Nodes
         Node(
@@ -64,6 +78,16 @@ def generate_launch_description():
                 'max_history_turns': LaunchConfiguration('max_history_turns'),
                 'location': LaunchConfiguration('location'),
                 'timezone': LaunchConfiguration('timezone'),
+            }],
+        ),
+        Node(
+            package='assistant',
+            executable='tts_node',
+            name='tts',
+            output='screen',
+            parameters=[{
+                'voice': LaunchConfiguration('tts_voice'),
+                'length_scale': LaunchConfiguration('tts_rate'),
             }],
         ),
     ])
