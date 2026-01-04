@@ -1,6 +1,7 @@
-"""ROS2 node for LLM-powered responses using Claude API."""
+"""ROS2 node for LLM-powered responses using Claude API with conversation support."""
 
 import os
+import time
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -8,15 +9,14 @@ from zoneinfo import ZoneInfo
 import anthropic
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
+from std_msgs.msg import Bool, String
 
 
 def _load_env_file():
     """Load .env file from common locations."""
-    # Check multiple possible locations
     search_paths = [
-        Path.cwd() / ".env",  # Current working directory
-        Path.home() / "Documents/ros2-home-assistant/.env",  # Common dev location
+        Path.cwd() / ".env",
+        Path.home() / "Documents/ros2-home-assistant/.env",
     ]
 
     for env_path in search_paths:
@@ -41,7 +41,6 @@ Context:
 Guidelines:
 - Be direct and professional. No unnecessary pleasantries.
 - Give actionable answers. Skip preamble.
-- You only get one response - make it count. This is not a conversation.
 - If you cannot help, say so briefly.
 - Do not patronize or over-explain.
 - Keep responses under 2-3 sentences when possible.
@@ -67,7 +66,7 @@ CUSTOM_TOOLS = [
 
 
 class LLMNode(Node):
-    """ROS2 node that processes user requests through Claude API."""
+    """ROS2 node that processes user requests through Claude API with conversation support."""
 
     def __init__(self):
         super().__init__("llm")
@@ -80,6 +79,8 @@ class LLMNode(Node):
         self.declare_parameter("web_search", True)
         self.declare_parameter("location", "Seattle, WA")
         self.declare_parameter("timezone", "America/Los_Angeles")
+        self.declare_parameter("conversation_timeout", 30.0)
+        self.declare_parameter("max_history_turns", 10)
 
         # Get parameter values
         input_topic = self.get_parameter("input_topic").value
@@ -89,6 +90,8 @@ class LLMNode(Node):
         self._web_search = self.get_parameter("web_search").value
         self._location = self.get_parameter("location").value
         self._timezone = self.get_parameter("timezone").value
+        self._conversation_timeout = self.get_parameter("conversation_timeout").value
+        self._max_history_turns = self.get_parameter("max_history_turns").value
 
         # Build system prompt with context
         self._system_prompt = SYSTEM_PROMPT_TEMPLATE.format(
@@ -106,21 +109,56 @@ class LLMNode(Node):
 
         self._client = anthropic.Anthropic(api_key=api_key)
 
-        # Create subscriber and publisher
+        # Conversation state
+        self._conversation_history = []
+        self._conversation_active = False
+        self._last_activity_time = 0.0
+        self._is_processing = False
+
+        # Create subscriber and publishers
         self._subscription = self.create_subscription(
-            String,
-            input_topic,
-            self._request_callback,
-            10,
+            String, input_topic, self._request_callback, 10
         )
-        self._publisher = self.create_publisher(String, output_topic, 10)
+        self._response_publisher = self.create_publisher(String, output_topic, 10)
+        self._state_publisher = self.create_publisher(Bool, "conversation_active", 10)
+
+        # Create timer for timeout checking (runs every second)
+        self._timeout_timer = self.create_timer(1.0, self._check_timeout)
 
         search_status = "enabled" if self._web_search else "disabled"
         self.get_logger().info(
-            f'LLM node started. Listening on "{input_topic}", '
-            f'publishing to "{output_topic}" (web search: {search_status}, '
-            f'location: {self._location})'
+            f"LLM node started with conversation support. "
+            f'Listening on "{input_topic}", publishing to "{output_topic}" '
+            f"(web search: {search_status}, timeout: {self._conversation_timeout}s)"
         )
+
+    def _publish_state(self, active: bool):
+        """Publish conversation state."""
+        msg = Bool()
+        msg.data = active
+        self._state_publisher.publish(msg)
+
+    def _check_timeout(self):
+        """Check if conversation has timed out."""
+        if not self._conversation_active or self._is_processing:
+            return
+
+        elapsed = time.time() - self._last_activity_time
+        if elapsed >= self._conversation_timeout:
+            self.get_logger().info("Conversation timed out")
+            self._end_conversation(publish_goodbye=True)
+
+    def _end_conversation(self, publish_goodbye: bool = True):
+        """End the current conversation and clear history."""
+        self._conversation_active = False
+        self._conversation_history = []
+        self._publish_state(False)
+
+        if publish_goodbye:
+            out_msg = String()
+            out_msg.data = "Goodbye!"
+            self._response_publisher.publish(out_msg)
+            self.get_logger().info("Conversation ended: Goodbye!")
 
     def _execute_tool(self, name: str, input_data: dict) -> str:
         """Execute a tool and return the result."""
@@ -139,11 +177,28 @@ class LLMNode(Node):
         """Handle incoming user requests."""
         user_request = msg.data.strip()
 
+        # Check for end conversation marker
+        if user_request.startswith("[END]"):
+            self._end_conversation(publish_goodbye=True)
+            return
+
         if not user_request:
             self.get_logger().warning("Received empty request, ignoring")
             return
 
+        # Ignore requests while already processing
+        if self._is_processing:
+            self.get_logger().info(f'Ignoring request (busy): "{user_request}"')
+            return
+
+        self._is_processing = True
         self.get_logger().info(f'Processing request: "{user_request}"')
+
+        # Mark conversation as active and set activity time
+        # (set time now so timeout doesn't trigger immediately on error)
+        self._conversation_active = True
+        self._last_activity_time = time.time()
+        self._publish_state(True)
 
         try:
             # Build tools list
@@ -152,14 +207,27 @@ class LLMNode(Node):
                 tools.append({"type": "web_search_20250305", "name": "web_search"})
             tools.extend(CUSTOM_TOOLS)
 
-            messages = [{"role": "user", "content": user_request}]
+            # Add user message to history
+            self._conversation_history.append({"role": "user", "content": user_request})
+
+            # Trim history if too long (keep last N turns = 2N messages)
+            max_messages = self._max_history_turns * 2
+            if len(self._conversation_history) > max_messages:
+                self._conversation_history = self._conversation_history[-max_messages:]
+
+            # Create working copy of messages for this request's tool loop
+            messages = list(self._conversation_history)
 
             # Agentic loop to handle tool calls
             while True:
                 response = self._client.messages.create(
                     model=self._model,
                     max_tokens=self._max_tokens,
-                    system=self._system_prompt,
+                    system=[{
+                        "type": "text",
+                        "text": self._system_prompt,
+                        "cache_control": {"type": "ephemeral"},
+                    }],
                     messages=messages,
                     tools=tools,
                 )
@@ -185,7 +253,7 @@ class LLMNode(Node):
                     # No more tool calls, extract final text
                     break
 
-            # Extract text from final response (concatenate all text blocks)
+            # Extract text from final response
             text_parts = []
             for block in response.content:
                 if block.type == "text":
@@ -196,14 +264,29 @@ class LLMNode(Node):
                 self.get_logger().warning("No text in response")
                 return
 
+            # Add assistant response to conversation history
+            self._conversation_history.append(
+                {"role": "assistant", "content": response_text}
+            )
+
+            # Publish response
             out_msg = String()
             out_msg.data = response_text
-            self._publisher.publish(out_msg)
+            self._response_publisher.publish(out_msg)
 
             self.get_logger().info(f'Response: "{response_text}"')
 
+            # Reset activity time for timeout
+            self._last_activity_time = time.time()
+
         except anthropic.APIError as e:
             self.get_logger().error(f"Claude API error: {e}")
+            # Notify user of error
+            out_msg = String()
+            out_msg.data = "Sorry, I encountered an error. Please try again."
+            self._response_publisher.publish(out_msg)
+        finally:
+            self._is_processing = False
 
 
 def main(args=None):

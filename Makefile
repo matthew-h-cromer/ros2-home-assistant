@@ -9,8 +9,8 @@ clean:
 	rm -rf build/ install/ log/ models/
 
 # Rebuild from scratch
-rebuild: 
-	clean build
+rebuild: clean
+	colcon build --symlink-install
 
 # Run the assistant
 run:
