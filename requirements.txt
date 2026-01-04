@@ -1,0 +1,10 @@
+# ROS2 Home Assistant Dependencies
+
+# Speech Recognition
+faster-whisper
+silero-vad
+sounddevice
+numpy
+
+# TTS (placeholder - will add Piper later)
+# piper-tts
