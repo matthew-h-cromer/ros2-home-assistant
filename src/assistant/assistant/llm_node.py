@@ -32,19 +32,17 @@ def _load_env_file():
 _load_env_file()
 
 
-SYSTEM_PROMPT_TEMPLATE = """You are Ross, a home assistant. Your goal is to provide maximally helpful and concise responses.
+SYSTEM_PROMPT_TEMPLATE = """You are Ross, a voice assistant.
 
-Context:
-- Location: {location}
-- Timezone: {timezone}
+Location: {location} | Timezone: {timezone}
 
-Guidelines:
-- Be direct and professional. No unnecessary pleasantries.
-- Give actionable answers. Skip preamble.
-- If you cannot help, say so briefly.
-- Do not patronize or over-explain.
-- Keep responses under 2-3 sentences when possible.
-- Use web search for current information (weather, news, sports, prices, etc.)."""
+Your responses are READ ALOUD. Long responses are confusing and waste the user's time.
+
+- 1-2 short sentences max.
+- Use the absolute minimum amount of words that effectively answer the question.
+- Answer ONLY what was asked, nothing extra.
+- Optimize your answer to be easily understood when read aloud.
+- Skip context the user already knows"""
 
 
 CUSTOM_TOOLS = [
@@ -114,10 +112,14 @@ class LLMNode(Node):
         self._conversation_active = False
         self._last_activity_time = 0.0
         self._is_processing = False
+        self._tts_speaking = False
 
         # Create subscriber and publishers
         self._subscription = self.create_subscription(
             String, input_topic, self._request_callback, 10
+        )
+        self._tts_subscription = self.create_subscription(
+            Bool, "tts_speaking", self._tts_state_callback, 10
         )
         self._response_publisher = self.create_publisher(String, output_topic, 10)
         self._state_publisher = self.create_publisher(Bool, "conversation_active", 10)
@@ -138,9 +140,18 @@ class LLMNode(Node):
         msg.data = active
         self._state_publisher.publish(msg)
 
+    def _tts_state_callback(self, msg: Bool):
+        """Handle TTS speaking state updates."""
+        was_speaking = self._tts_speaking
+        self._tts_speaking = msg.data
+
+        # Reset timeout when TTS finishes speaking
+        if was_speaking and not self._tts_speaking:
+            self._last_activity_time = time.time()
+
     def _check_timeout(self):
         """Check if conversation has timed out."""
-        if not self._conversation_active or self._is_processing:
+        if not self._conversation_active or self._is_processing or self._tts_speaking:
             return
 
         elapsed = time.time() - self._last_activity_time
@@ -231,6 +242,21 @@ class LLMNode(Node):
                     messages=messages,
                     tools=tools,
                 )
+
+                # Log tool usage and web search results
+                for block in response.content:
+                    if block.type == "tool_use":
+                        self.get_logger().info(f"Tool called: {block.name}")
+                    elif block.type == "web_search_tool_result":
+                        # content is a list of search result objects
+                        results = getattr(block, "content", [])
+                        self.get_logger().info(
+                            f"Web search returned {len(results)} sources:"
+                        )
+                        for result in results[:5]:
+                            title = getattr(result, "title", "Unknown")
+                            url = getattr(result, "url", "")
+                            self.get_logger().info(f"  - {title}: {url}")
 
                 # Check if we need to execute tools
                 if response.stop_reason == "tool_use":
