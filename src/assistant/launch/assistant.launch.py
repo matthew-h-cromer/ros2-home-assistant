@@ -64,8 +64,8 @@ def generate_launch_description():
         ),
         Node(
             package='assistant',
-            executable='trigger_node',
-            name='trigger_detection',
+            executable='wake_node',
+            name='wake_detection',
             output='screen',
         ),
         Node(
