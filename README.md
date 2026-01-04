@@ -1,19 +1,6 @@
 # ROS2 Home Assistant
 
-A voice-controlled home assistant powered by ROS2 Kilted. Say **"Hey Ross"** to wake it up.
-
-## Project Goals
-
-- **Short-term:** Conversational AI that answers questions via voice
-- **Long-term:** Full home automation integration
-
-### Features (Planned)
-
-- Wake word activation ("Hey Ross")
-- Offline speech recognition (Whisper)
-- Offline text-to-speech
-- LLM integration for natural conversations
-- Home automation control (future)
+A voice-controlled home assistant powered by ROS2 Kilted.
 
 ## Hardware
 
@@ -47,19 +34,6 @@ See `requirements.txt` for Python dependencies. Key components:
 - `faster-whisper` - Offline speech recognition
 - `silero-vad` - Voice activity detection
 - `sounddevice` - Audio capture
-- Offline TTS (TBD - likely Piper)
-
-## Project Structure
-
-```
-ros2-home-assistant/
-├── src/
-│   └── assistant/          # Main ROS2 package
-├── models/                  # ML models (gitignored)
-├── setup.sh                 # Initial setup script
-├── Makefile                 # Build automation
-└── requirements.txt         # Python dependencies
-```
 
 ## Getting Started
 
@@ -88,35 +62,25 @@ source install/setup.bash
 ### Running
 
 ```bash
-# Run the assistant (coming soon)
-ros2 run assistant assistant_node
+# Run speech recognition
+ros2 run assistant speech_node
 ```
 
-## Architecture
+The first run downloads the Whisper "small" model (~460 MB) to `models/`.
 
+#### Speech Node Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `model` | `small` | Whisper model size (tiny/base/small/medium/large) |
+| `device_index` | `-1` | Microphone device (-1 for default) |
+| `vad_threshold` | `0.5` | Voice detection sensitivity (0.0-1.0) |
+| `vad_silence_ms` | `500` | Silence duration to end utterance (ms) |
+
+Example with custom parameters:
+```bash
+ros2 run assistant speech_node --ros-args -p model:=base -p vad_threshold:=0.7
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Microphone    │────▶│  Speech Node    │────▶│   LLM Node      │
-│   (USB Input)   │     │  (Whisper+VAD)  │     │   (TBD)         │
-└─────────────────┘     └─────────────────┘     └────────┬────────┘
-                                                         │
-┌─────────────────┐     ┌─────────────────┐              │
-│    Speaker      │◀────│   TTS Node      │◀─────────────┘
-│   (USB Output)  │     │   (Piper?)      │
-└─────────────────┘     └─────────────────┘
-```
-
-### ROS2 Topics (Planned)
-
-| Topic | Type | Description |
-|-------|------|-------------|
-| `/speech` | `std_msgs/String` | Transcribed speech from user |
-| `/response` | `std_msgs/String` | LLM response text |
-| `/tts` | `std_msgs/String` | Text to speak |
-
-## Related Projects
-
-- [ros2-learning](../ros2-learning) - Learning project with working speech recognition node
 
 ## License
 

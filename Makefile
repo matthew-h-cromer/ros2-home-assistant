@@ -9,8 +9,9 @@ clean:
 	rm -rf build/ install/ log/ models/
 
 # Rebuild from scratch
-rebuild: clean build
+rebuild: 
+	clean build
 
-# Run the assistant (placeholder)
+# Run the assistant
 run:
-	ros2 run assistant assistant_node
+	ros2 run assistant speech_node

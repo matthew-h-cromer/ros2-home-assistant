@@ -20,8 +20,7 @@ setup(
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            # Entry points will be added as nodes are created
-            # 'assistant_node = assistant.assistant_node:main',
+            'speech_node = assistant.speech_node:main',
         ],
     },
 )
