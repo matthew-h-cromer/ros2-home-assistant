@@ -34,6 +34,7 @@ See `requirements.txt` for Python dependencies. Key components:
 - `faster-whisper` - Offline speech recognition
 - `silero-vad` - Voice activity detection
 - `sounddevice` - Audio capture
+- `anthropic` - Claude API client
 
 ## Getting Started
 
@@ -73,6 +74,7 @@ To run nodes individually:
 ```bash
 ros2 run assistant speech_node
 ros2 run assistant trigger_node
+ros2 run assistant llm_node
 ```
 
 The first run downloads the Whisper "small" model (~460 MB) to `models/`.
@@ -108,6 +110,23 @@ ros2 topic echo /user_requests
 ```
 
 Say "Hey Ross, turn on the lights" and `/user_requests` will receive: "turn on the lights"
+
+#### LLM Node Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `input_topic` | `user_requests` | Topic to subscribe to for user requests |
+| `output_topic` | `assistant_response` | Topic to publish LLM responses |
+| `model` | `claude-sonnet-4-20250514` | Claude model to use |
+| `max_tokens` | `256` | Maximum response length |
+
+Requires `ANTHROPIC_API_KEY` in `.env` file at repo root.
+
+Example:
+```bash
+# Listen for assistant responses
+ros2 topic echo /assistant_response
+```
 
 ## License
 

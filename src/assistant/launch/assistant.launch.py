@@ -5,7 +5,7 @@ from launch_ros.actions import Node
 
 
 def generate_launch_description():
-    """Generate launch description with speech and trigger nodes."""
+    """Generate launch description with all assistant nodes."""
     return LaunchDescription([
         Node(
             package='assistant',
@@ -17,6 +17,12 @@ def generate_launch_description():
             package='assistant',
             executable='trigger_node',
             name='trigger_detection',
+            output='screen',
+        ),
+        Node(
+            package='assistant',
+            executable='llm_node',
+            name='llm',
             output='screen',
         ),
     ])

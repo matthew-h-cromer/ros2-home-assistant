@@ -27,6 +27,7 @@ setup(
         'console_scripts': [
             'speech_node = assistant.speech_node:main',
             'trigger_node = assistant.trigger_node:main',
+            'llm_node = assistant.llm_node:main',
         ],
     },
 )

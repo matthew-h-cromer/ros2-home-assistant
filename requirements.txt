@@ -6,5 +6,8 @@ silero-vad
 sounddevice
 numpy
 
+# LLM
+anthropic
+
 # TTS (placeholder - will add Piper later)
 # piper-tts
