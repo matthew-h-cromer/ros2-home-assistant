@@ -7,7 +7,7 @@ from typing import Optional
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
+from std_msgs.msg import Bool, String
 
 from .audio_stream import AudioStream
 from .constants import DEFAULT_WHISPER_MODEL
@@ -51,9 +51,19 @@ class SpeechRecognitionNode(Node):
         self.segment_queue: queue.Queue[SpeechSegment] = queue.Queue()
         self.result_queue: queue.Queue[str] = queue.Queue()
 
-        # Thread-safe running flag
+        # Thread-safe flags
         self._running = threading.Event()
         self._running.set()
+        self._tts_speaking = threading.Event()
+        self._tts_cooldown_until = 0.0  # timestamp when cooldown ends
+
+        # Subscribe to TTS speaking state to avoid feedback loops
+        self._tts_subscription = self.create_subscription(
+            Bool,
+            "tts_speaking",
+            self._tts_speaking_callback,
+            10,
+        )
 
         # Initialize VAD
         self.vad = VoiceActivityDetector(
@@ -98,9 +108,25 @@ class SpeechRecognitionNode(Node):
 
         self.get_logger().info(f'Speech recognition started. Publishing to "{topic_name}"')
 
+    def _tts_speaking_callback(self, msg: Bool) -> None:
+        """Update TTS speaking state."""
+        was_speaking = self._tts_speaking.is_set()
+        if msg.data:
+            self._tts_speaking.set()
+        else:
+            self._tts_speaking.clear()
+            if was_speaking:
+                # TTS just stopped - clear buffer and wait for room to quiet
+                self.vad.reset()
+                self._tts_cooldown_until = time.time() + 0.3
+
     def _audio_callback(self, audio_data: bytes) -> None:
         """Called by audio stream with new audio data."""
         if not self._running.is_set():
+            return
+
+        # Ignore audio while TTS is speaking or during cooldown to avoid feedback
+        if self._tts_speaking.is_set() or time.time() < self._tts_cooldown_until:
             return
 
         segment = self.vad.process(audio_data)
